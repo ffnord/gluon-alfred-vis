@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>FFKI - Alfred JSON Status</title>
+    <title>FFRG - Alfred JSON Status</title>
     <link rel="stylesheet" type="text/css" href="css/style.css" />
     <link rel="stylesheet" type="text/css" href="css/list.css" />
     
@@ -9,25 +9,42 @@
     
     <script>
       var arr = [];
+                  
 
       $(function() {
         $.getJSON( 'alfred.json', function(data) {
           $.each( data, function( key,val ) {
+              
             try {
               arr.push({
-                hostname: val['hostname'],
-                address: val['network']['addresses'][0],
-                uptime: parseFloat(val['statistics']['uptime']),
-                tx: parseFloat(val['statistics']['traffic']['tx']['bytes']),
-                rx: parseFloat(val['statistics']['traffic']['rx']['bytes']),
-                firmware: val['software']['firmware']['release'],
-                model: val['hardware']['model'],
-                autoupdate: (val.software.autoupdater.enabled?val.software.autoupdater.branch:''),
-                contact: ('owner' in val?val['owner']['contact']:'')
-              });
-            } catch (e) {};
+              hostname: val['hostname'],
+              uptime: parseFloat(val['statistics']['uptime']),
+              tx: parseFloat(val['statistics']['traffic']['tx']['bytes']),
+              rx: parseFloat(val['statistics']['traffic']['rx']['bytes']),
+              address: val['network']['addresses'][0],
+              firmware: val['software']['firmware']['release'],
+              model: val['hardware']['model'],
+              autoupdate: (val.software.autoupdater.enabled?val.software.autoupdater.branch:''),
+              contact: ('owner' in val?val['owner']['contact']:'') })
+            } catch (e) {
+                try {
+                  arr.push({
+                  hostname: val['hostname'],
+                  uptime: 0,
+                  tx: 0,
+                  rx: 0,
+                  address: val['network']['addresses'][0],
+                  firmware: val['software']['firmware']['release'],
+                  model: val['hardware']['model'],
+                  autoupdate: (val.software.autoupdater.enabled?val.software.autoupdater.branch:''),
+                  contact: ('owner' in val?val['owner']['contact']:'') })
+                  } 
+                catch (f) {};
+            };
+             
           });
 
+    
           $('#headings th').click(function() {
             var id = $(this).attr('id');
             var asc = (!$(this).attr('asc')); // switch the order, true if not set
@@ -135,8 +152,8 @@
 
       function showResults () {
         var html = '';
-        for (var e in arr) {
-          html += '<tr>'
+            for (var e in arr) {
+            html += '<tr>'
             +'<td><a target="_blank" href="http://['+arr[e].address+']/">'+arr[e].hostname+'</a></td>'
             +'<td>'+Math.floor(arr[e].uptime/3600)+'h</td>'
             +'<td>'+Math.floor(arr[e].tx/1048576)+'</td>'
@@ -153,11 +170,12 @@
   </head>
   <body>
     <header>
-      <h1><a href="/" id="sitelink">kiel.freifunk.net</a></h1>
+      <h1><a href="/" id="sitelink">freifunk-ruhrgebiet.de</a></h1>
       <ul>
-        <li><a href="graph.html">Graph</a></li>
-        <li><a href="geomap.html">Karte</a></li>
-        <li><a href="list.html">Liste</a></li>
+        <li><a href="../graph.html">Graph</a></li>
+        <li><a href="../geomap.html">Karte</a></li>
+        <li><a href="../list.html">Liste</a></li>
+	<li><a href="alfred.html">Alfred</a></li>
       </ul>
     </header>
     <div class="container">
