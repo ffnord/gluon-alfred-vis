@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>FFKI - Alfred JSON Status</title>
+	<link rel="stylesheet" type="text/css" href="css/style.css" />
+	<link rel="stylesheet" type="text/css" href="css/list.css" />
+	<link rel="stylesheet" type="text/css" href="css/alfred.css" />
+	
+	<script type="text/javascript" src="lib/frameworks/jquery-1.11.0.min.js"></script>
+	
+	<script type="text/javascript">
+	var arr = [];
+
+	function inArray(needle, haystack) {
+		var length = haystack.length;
+		for(var i = 0; i < length; i++) {
+			if(haystack[i] == needle) return true;
+		}
+		return false;
+	}
+
+	function pad(number) {
+		if ( number < 10 ) {
+			return '0' + number;
+		}
+		return number;
+	}
+    
+    // each single node has its own json logged here:
+	path_to_nodes_json='logs/nodes/';
+	path_to_nodes_legacy_json='logs/nodes_legacy/';
+	
+	//TODO: dies anpassen, und auch die header line weiter unten
+	// ffhh
+	siteurl='http://hamburg.freifunk.net'
+	ffmap_path='nodes_ffhh/'
+	// ffhl
+	siteurl='http://luebeck.freifunk.net'
+	ffmap_path='map/'
+	// ffki
+	siteurl='http://freifunk.in-kiel.de'
+	ffmap_path='ffmap/'
+	
+	// all column heads:
+	var cols = [
+		"hostname", 
+		"uptime",
+		"offline",
+		"tx",
+		"rx",
+		"firmware",
+		"model",
+		"mac",
+		"autoupdate",
+		"contact",
+		"longitude",
+		"latitude",
+		"loadavg",
+		"mem"
+	];
+
+	function fill_arr(key,val,offline){
+		if(key=="additional_data"){
+			// added by alfred-log.py in alfred_offline.json
+			$('#headline').append(" ("+val['datetime']+")")
+		}else{
+			var n = [];
+			n.offline=offline;
+			try { n.hostname=val['hostname']															; } catch (e) {console.log('no')};
+			try { n.fastd_enabled= val['software']['fastd']['enabled']?1:0								; } catch (e) {};
+			try { n.address= val['network']['addresses'][0]												; } catch (e) {};
+			if(val['statistics'] == null) {
+				n.uptime=0;
+				n.tx=0;
+				n.rx=0;
+				n.idletime= 0;
+				n.processes_running= 0;
+				n.loadavg=0;
+				n.mem=0;
+			} else {
+				try { n.uptime=parseFloat(val['statistics']['uptime'])									; } catch (e) {};
+				try { n.tx= parseFloat(val['statistics']['traffic']['tx']['bytes'])						; } catch (e) {};
+				try { n.rx= parseFloat(val['statistics']['traffic']['rx']['bytes'])						; } catch (e) {};
+				try { n.idletime= Math.floor(parseFloat(val['statistics']['idletime'])/3600)+'h'		; } catch (e) {};
+				try { n.processes_running= val['statistics']['processes']['running']					; } catch (e) {};
+				try { n.loadavg= parseFloat(val['statistics'] != null?val['statistics']['loadavg']:0)	; } catch (e) {};
+				try { 
+					n.mem= parseFloat(val['statistics']['memory'] != null?val['statistics']['memory']['free']:1.0) / parseFloat(val['statistics']['memory'] != null?val['statistics']['memory']['total']:0);
+				} catch (e) {};
+			}
+			try { n.firmware=val.software?val['software']['firmware']['release']:(val.distribution?val.distribution:"-");} catch (e) {};
+			try { n.model= val['hardware']?val['hardware']['model']:"-"									; } catch (e) {};
+			try { n.autoupdate= val.software?(val.software.autoupdater.enabled?val.software.autoupdater.branch:''):'-'	; } catch (e) {};
+			try { n.contact= ('owner' in val?val['owner']['contact']:'')								; } catch (e) {};
+			try { n.longitude= ('location' in val?val['location']['longitude']:'')						; } catch (e) {};
+			try { n.latitude= ('location' in val?val['location']['latitude']:'')						; } catch (e) {};
+			try { n.mac= key																			; } catch (e) {};
+			// legacy:
+			try { if(val['clientcount']) n.clientcount= val['clientcount']								; } catch (e) {};
+			try { if(val['legacy']) n.legacy= val['legacy']												; } catch (e) {};
+			arr.push(n);
+		}
+	}
+	var step=0;
+	var count_offline=0
+	var count_online=0
+	var count_legacy_offline_seen=0
+	var count_legacy_online=0
+	var count_legacy=0
+	$(function() {
+		// first add offline nodes
+		$('#subheadline').append("<br>Step "+(++step)+' alfred_offline.json');
+		$.getJSON( 'alfred_offline.json', function(data) {
+			count_offline--; // first element is "additional_data"
+			$.each( data, function( key,val ) {
+				fill_arr(key,val,1)
+				count_offline++
+			})
+		}).done(function(){
+			// add online nodes
+			$('#subheadline').append("<br>Step "+(++step)+' alfred.json');
+			$.getJSON( 'alfred.json', function(data) {
+				$.each( data, function( key,val ) {
+					fill_arr(key,val,0)
+					count_online++
+				});
+			}).done(function(){
+				// get legacy nodes
+				$('#subheadline').append("<br>Step "+(++step)+' nodes.json');
+				$.getJSON( 'nodes.json', function(data) {
+					$.each( data.nodes, function( key,val ) {
+						if(!val.flags.client && !val.firmware){
+							val.hostname=val.name
+							key=val.id;
+							if(val.name=="") val.hostname=val.id;
+							val.software=new Object()
+							val.software.firmware=new Object()
+							val.software.firmware.release='0.3'
+							val.legacy=true
+							val.software.autoupdater=new Object()
+							val.software.autoupdater.enabled=false
+							if(val.geo){
+								val.location=new Object();
+								val.location.latitude=val.geo[0];
+								val.location.longitude=val.geo[1];
+							}
+							fill_arr(key,val, (val.flags.online?0:1))
+							if (val.flags.online) {
+								count_legacy_online++;
+								count_online++;
+							} else count_offline++;
+							count_legacy++;
+						}
+					});
+					$('#subheadline').html('');
+					count_total=(count_offline+count_online);
+					$('#subheadline').append(" "+count_online+" Knoten online von "+count_total+"");
+					$('#subheadline').append("<br>"+(count_online-count_legacy_online)+" aktuelle online von "+(count_total-count_legacy)+"");
+					$('#subheadline').append("<br>"+(count_legacy_online)+" legacy online von "+count_legacy+"");
+					$('#headings th').click(function() {
+						var id = $(this).attr('id');
+						var asc = (!$(this).attr('asc')); // switch the order, true if not set
+
+						// set asc="asc" when sorted in ascending order
+						$('#headings th').each(function() {
+							$(this).removeAttr('asc');
+						});
+						if (asc) $(this).attr('asc', 'asc');
+
+						sortResults(id, asc);
+					});
+
+					sortResults('hostname', true);
+				});
+			});
+		});
+	});
+	
+	function order(c) {
+		if (/^\d$/.test(c))
+			return 0;
+		else if (/^[a-z]$/i.test(c))
+			return c.charCodeAt(0);
+		else if (c === '~')
+			return -1;
+		else if (c)
+			return c.charCodeAt(0) + 256;
+		else
+			return 0;
+	}
+
+	// Based on dpkg code
+	function vercomp(a, b) {
+		var apos = 0, bpos = 0;
+		while (apos < a.length || bpos < b.length) {
+		var first_diff = 0;
+
+		while ((apos < a.length && !/^\d$/.test(a[apos])) || (bpos < b.length && !/^\d$/.test(b[bpos]))) {
+			var ac = order(a[apos]);
+			var bc = order(b[bpos]);
+
+			if (ac !== bc)
+				return ac - bc;
+
+			apos++;
+			bpos++;
+		}
+
+		while (a[apos] === '0')
+			apos++;
+		while (b[bpos] === '0')
+			bpos++;
+
+		while (/^\d$/.test(a[apos]) && /^\d$/.test(b[bpos])) {
+			if (first_diff === 0)
+				first_diff = a.charCodeAt(apos) - b.charCodeAt(bpos);
+
+				apos++;
+			bpos++;
+		}
+
+		if (/^\d$/.test(a[apos]))
+			return 1;
+
+		if (/^\d$/.test(b[bpos]))
+			return -1;
+
+		if (first_diff !== 0)
+			return first_diff;
+		}
+
+		return 0;
+	}
+
+	function compare(a, b) {
+		try {
+			a = a.toUpperCase();
+			b = b.toUpperCase();
+		} catch (e) {}
+
+		if (a == b) return 0;
+		else if (a > b) return 1;
+		else return -1;
+	}
+
+	function sortResults(prop, asc) {
+		for (var i = 0; i < arr.length; i++) {
+			arr[i].pos = i;
+		}
+
+		arr = arr.sort(function(a, b) {
+			var ret;
+
+			if (prop === 'firmware' || prop === 'model')
+				ret = vercomp(a[prop], b[prop]);
+			else
+				ret = compare(a[prop], b[prop]);
+
+			if (ret == 0) ret = compare(a.pos, b.pos);
+
+			if (asc) return ret;
+			else return -ret;
+		});
+		showResults();
+	}
+	function showResults () {
+		var html = '';
+		for (var e in arr) {
+			nodename=arr[e].hostname;
+			
+			offlineclass=(arr[e].offline==1?' class="offline"':'')
+			offlineid=(arr[e].offline==1?' id="offline_'+e+'"':'')
+			
+			html += '<tr>'
+				+'<td><a target="_blank" href="http://['+arr[e].address+']/">'+nodename+'</a></td>'
+				+'<td'+offlineclass+'>'+Math.floor(arr[e].uptime/3600)+'h</td>'
+				+'<td'+offlineclass+offlineid+'>'+(arr[e].offline===1?"offline":(arr[e].offline?arr[e].offline:''))+'</td>'
+				+'<td>'+(arr[e].tx?(Math.floor(arr[e].tx/1048576)):'')+'</td>'
+				+'<td>'+(arr[e].rx?(Math.floor(arr[e].rx/1048576)):'')+'</td>'
+				+'<td>'+arr[e].firmware;
+			// special for kiel: wiki page for legacy nodes
+			site_is_ffki=(siteurl=='http://freifunk.in-kiel.de');
+			site_is_ffhl=(siteurl=='http://luebeck.freifunk.net');
+			
+			if(arr[e].firmware==0.3 && site_is_ffki) html += ' <a href="'+siteurl+'/wiki/Nodes/'+nodename+'" target="_blank">mehr</a>';
+			html +='</td>'
+				+'<td>'+arr[e].model+'</td>'
+				+'<td>'
+			if(site_is_ffki) html +='<a href="'+siteurl+'/'+ffmap_path+'nodeplot.cgi?'+arr[e].mac+'" target="_blank">'+arr[e].mac+'</a>'
+			else if(site_is_ffhl) html +='<a href="'+siteurl+'/'+ffmap_path+'nodes/'+arr[e].mac.replace(/\:/gi,"")+'.png" target="_blank">'+arr[e].mac+'</a>'
+			else html +=arr[e].mac;	
+			html +='</td>'
+				+'<td>'+arr[e].autoupdate+'</td>'
+				+'<td>'+arr[e].contact+'</td>'
+				+'<td>'+(arr[e].longitude?('<a href="'+siteurl+'/'+ffmap_path+'geomap.html?lat='+arr[e].latitude+'&lon='+arr[e].longitude+'" target="_blank">'+parseFloat(arr[e].longitude).toFixed(5)+' '+parseFloat(arr[e].latitude).toFixed(5)+'</a>'):'')+'</td>'
+				+'<td>'+arr[e].autoupdate+'</td>'
+				+'<td>'+(arr[e].loadavg?arr[e].loadavg:'')+'</a></td>'
+				+'<td>'+(arr[e].mem?(arr[e].mem*100).toFixed(2)+'%':'')+'</td>'
+				+'<td>';
+			for (var p in arr[e]) {
+				if (arr[e].hasOwnProperty(p) && !inArray(p,cols)) {
+					if(p!="pos") html += p + ':' + arr[e][p] + '<br>';
+				}
+			}
+			html +='<a href="'+path_to_nodes_json+nodename+'" target="_blank">data</a></td>'
+				+'</tr>';
+		}
+		// add last access time to offline nodes
+		count_legacy_offline_seen=0;
+		var xhrs = arr.map(function(node,e) {
+			if(node.offline && !node.legacy){
+				var nodename = node.hostname;
+				return $.ajax({
+					url: path_to_nodes_json + nodename
+				}).done(function(data, status, xhr) {
+					var since= new Date(xhr.getResponseHeader("Last-Modified"));
+					$('#offline_'+e).append(" seit: " +pad(since.getDate())+'.'+pad(since.getMonth() +1)+'. '+ pad(since.getHours())+':'+pad(since.getMinutes()));
+				});
+			}else if(node.offline && node.legacy){
+				// legacy offline nodes
+				var nodename = node.hostname;
+				return $.ajax({
+					url: path_to_nodes_legacy_json + nodename
+				}).done(function(data, status, xhr) {
+					var since= new Date(xhr.getResponseHeader("Last-Modified"));
+					$('#offline_'+e).html("zuletzt: " +pad(since.getDate())+'.'+pad(since.getMonth() +1)+'. '+ pad(since.getHours())+':'+pad(since.getMinutes()));
+					count_legacy_offline_seen++;
+				});
+			}
+		});
+		setTimeout('show_last_seen()',10000);
+		
+		$('#results').html(html);
+		$('#results').append(arr.length+" Eintr&auml;ge");
+		if(arr.length==0) alert("Fehler: kein Eintrag!");
+	}
+	function show_last_seen(){
+		$('#subheadline').append("<br>"+count_legacy_offline_seen+" der offline legacy nodes waren nach dem 1.8.2014 zuletzt online");
+	}
+	</script>
+</head>
+<body>
+	<header>
+		<h1><a href="http://freifunk.in-kiel.de/" id="sitelink">kiel.freifunk.net</a></h1>
+		<ul>
+			<li><a href="http://freifunk.in-kiel.de/ffmap/graph.html">Graph</a></li>
+			<li><a href="http://freifunk.in-kiel.de/ffmap/geomap.html">Karte</a></li>
+			<li><a href="http://freifunk.in-kiel.de/ffmap/list.html">Liste</a></li>
+		</ul>
+	</header>
+	<div class="container">
+	<h1 id="headline">Knotenliste</h1><span id="subheadline"></span>
+	<table id="list"></table>
+	</div>
+	<table id="list" class="tablesorter tablesorter-default">
+	<thead id="headings">
+		<tr class="tablesorter-headerRow">
+			<th id="hostname">hostname</th>
+			<th id="uptime">uptime</th>
+			<th id="offline">offline</th>
+			<th id="tx">tx (mb)</th>
+			<th id="rx">rx (mb)</th>
+			<th id="firmware">firmware</th>
+			<th id="model">model</th>
+			<th id="mac">mac</th>
+			<th id="autoupdate">autoupdate</th>
+			<th id="contact">contact</th>
+			<th id="longitude">location</th>
+			<th id="autoupdate">autoupdate</th>
+			<th id="loadavg">loadavg</th>
+			<th id="mem">mem free</th>
+			<th id="more">more</th>
+		</tr>
+	</thead>
+	<tbody id="results">
+		<tr><td colspan="0" style="text-align:center;">this page needs JavaScript to work. Data will be loaded...</td></tr>
+	</tbody>
+	</table>
+</body>
+</html>
