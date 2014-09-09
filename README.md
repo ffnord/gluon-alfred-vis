@@ -1,8 +1,8 @@
 gluon-alfred-vis
 ================
-Lists all nodes in Freifunk by analysing alfred.json
+Lists all nodes in Freifunk by analysing alfred json files
 
-there has to be a file `alfred.json` in the root folder of this krepository
+for this changed version there has to be a file `alfred_merged.json` in the root folder of this repository
 
 You have to merge alfred data id 158 and 159 for having full data sets with newer gluon releases.
 
