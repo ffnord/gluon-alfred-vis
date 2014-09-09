@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>FFKI - Alfred JSON Status</title>
+    <title>Freifunk Ruhrgebiet - Alfred Status</title>
     <link rel="stylesheet" type="text/css" href="css/style.css" />
     <link rel="stylesheet" type="text/css" href="css/list.css" />
     
@@ -11,21 +11,26 @@
       var arr = [];
 
       $(function() {
-        $.getJSON( 'alfred.json', function(data) {
+        $.getJSON( 'alfred_merged.json', function(data) {
           $.each( data, function( key,val ) {
             try {
+              if (typeof val['statistics'] != "undefined")
+                stats = val['statistics']
+              else
+                stats = val
               arr.push({
                 hostname: val['hostname'],
-                address: val['network']['addresses'][0],
-                uptime: parseFloat(val['statistics']['uptime']),
-                tx: parseFloat(val['statistics']['traffic']['tx']['bytes']),
-                rx: parseFloat(val['statistics']['traffic']['rx']['bytes']),
+                address: val.network.addresses ? val.network.addresses.filter(function (a) { return /^2a02:/.test(a); })[0] : null,
+                uptime: parseFloat(stats['uptime']),
+                tx: parseFloat(stats['traffic']['tx']['bytes']),
+                rx: parseFloat(stats['traffic']['rx']['bytes']),
                 firmware: val['software']['firmware']['release'],
                 model: val['hardware']['model'],
                 autoupdate: (val.software.autoupdater.enabled?val.software.autoupdater.branch:''),
-                contact: ('owner' in val?val['owner']['contact']:'')
+                loadavg: parseFloat(stats['loadavg'] != null?stats['loadavg']:0),
+                mem: parseFloat(stats['memory'] != null?stats['memory']['free']:1.0) / parseFloat(stats['memory'] != null?stats['memory']['total']:0)
               });
-            } catch (e) {};
+            } catch (e) {alert(e.message)};
           });
 
           $('#headings th').click(function() {
@@ -122,6 +127,8 @@
 
           if (prop === 'firmware' || prop === 'model')
             ret = vercomp(a[prop], b[prop]);
+          else if (prop === 'loadavg')
+            ret = a[prop] >= b[prop]?1:-1;
           else
             ret = compare(a[prop], b[prop]);
 
@@ -134,37 +141,42 @@
       }
 
       function showResults () {
-        var html = '';
+        var node = $('#results');
         for (var e in arr) {
-          html += '<tr>'
-            +'<td><a target="_blank" href="http://['+arr[e].address+']/">'+arr[e].hostname+'</a></td>'
-            +'<td>'+Math.floor(arr[e].uptime/3600)+'h</td>'
-            +'<td>'+Math.floor(arr[e].tx/1048576)+'</td>'
-            +'<td>'+Math.floor(arr[e].rx/1048576)+'</td>'
-            +'<td>'+arr[e].firmware+'</td>'
-            +'<td>'+arr[e].model+'</td>'
-            +'<td>'+arr[e].autoupdate+'</td>'
-            +'<td>'+arr[e].contact+'</td>'
-            +'</tr>';
+          node.append(
+            $('<tr>').append(
+              $('<td>').append(
+                $('<a target="_blank">')
+                  .attr('href', 'http://[' + arr[e].address + ']/')
+                  .text(arr[e].hostname)
+              ),
+              $('<td>').text(Math.floor(arr[e].uptime/3600) + 'h'),
+              $('<td>').text(Math.floor(arr[e].tx/1048576)),
+              $('<td>').text(Math.floor(arr[e].rx/1048576)),
+              $('<td>').text(arr[e].firmware),
+              $('<td>').text(arr[e].model),
+              $('<td>').text(arr[e].autoupdate),
+              $('<td>').text(arr[e].loadavg),
+              $('<td>').text((arr[e].mem*100).toFixed(2))
+            )
+          );
         }
-        $('#results').html(html);
       }
     </script>
   </head>
   <body>
     <header>
-      <h1><a href="/" id="sitelink">kiel.freifunk.net</a></h1>
+      <h1><a href="/" id="sitelink">freifunk-ruhrgebiet.de</a></h1>
       <ul>
-        <li><a href="graph.html">Graph</a></li>
-        <li><a href="geomap.html">Karte</a></li>
-        <li><a href="list.html">Liste</a></li>
+        <li><a href="../graph.html">Graph</a></li>
+        <li><a href="../geomap.html">Karte</a></li>
+        <li><a href="../list.html">Liste</a></li>
+        <li><a href="alfred.html">Alfred</a></li>
       </ul>
     </header>
     <div class="container">
-      <h1>Knotenliste</h1>
-      <table id="list"></table>
-    </div>
-    <table id="list" class="tablesorter tablesorter-default">
+      <h1>Alfred</h1>
+      <table id="list" class="tablesorter tablesorter-default">
       <thead id="headings">
         <tr class="tablesorter-headerRow">
           <th id="hostname">hostname</th>
@@ -174,7 +186,8 @@
           <th id="firmware">firmware</th>
           <th id="model">model</th>
           <th id="autoupdate">autoupdate</th>
-          <th id="contact">contact</th>
+          <th id="loadavg">loadavg</th>
+          <th id="mem">mem free</th>
         </tr>
       </thead>
       <tbody id="results">
@@ -183,3 +196,4 @@
     </table>
   </body>
 </html>
+
